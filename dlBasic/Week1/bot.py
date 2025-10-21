@@ -38,7 +38,7 @@ loader = PyPDFLoader(pdf)
 docs = loader.load()
 
 # separate by chanks with 200 letters overlap
-splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
 
 texts = splitter.split_documents(docs)
 texts_list = [t.page_content for t in texts]
@@ -65,7 +65,10 @@ vectorstore = FAISS.from_texts(texts_list, embedding=hf_embeddings)
 #
 # # llm
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-qa = RetrievalQA.from_chain_type(llm=llm, retriever=vectorstore.as_retriever())
+retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+qa = RetrievalQA.from_chain_type(
+    llm=llm, retriever=retriever, return_source_documents=True
+)
 
 # chatbot
 try:
@@ -73,8 +76,12 @@ try:
         query = input("\nYou: ").strip()
         if not query:
             continue
-        answer = qa.run(query)
-        print(f"\nGemini: {answer}")
+        answer = qa.invoke({"query": query})
+        print(f"\nGemini: {answer['result']}")
+        print("\n=== Source Documents (excerpt) ===")
+        for i, doc in enumerate(answer["source_documents"], start=1):
+            excerpt = doc.page_content[:200].replace("\n", " ")
+            print(f"{i}. {excerpt}…")
 
 except KeyboardInterrupt:
     print("\n Exit")
