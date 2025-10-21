@@ -25,7 +25,8 @@
                 numpy
                 pandas
                 matplotlib
-                jupytext
+                scikit-learn
+                tensorflow
               ]
             ))
           ];
