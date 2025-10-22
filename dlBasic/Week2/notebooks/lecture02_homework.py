@@ -211,8 +211,7 @@ accuracy = np.mean(y_pred_valid_label == y_valid_label)
 print(f"Validation Accuracy: {accuracy * 100:.4f}%")
 
 
-y_pred_proba_test = model.predict_proba(x_test)
-y_pred = y_pred_proba_test.argmax(axis=1)
+y_pred = model.predict_proba(x_test)
 
 submission = pd.Series(y_pred.argmax(axis=1), name="label")
 submission.to_csv("./submission_pred_02.csv", header=True, index_label="id")
