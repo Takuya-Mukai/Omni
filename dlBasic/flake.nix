@@ -21,6 +21,7 @@
             python3
             (python3.withPackages (
               ps: with ps; [
+                keras
                 jupyterlab
                 numpy
                 pandas
