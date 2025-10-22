@@ -104,8 +104,10 @@ x_train, y_train, x_test = load_fashionmnist()
 
 import time
 
+from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 # --- parameters ---
 W_WIDTH = 0.1
@@ -119,14 +121,29 @@ def softmax(x):
 
 class SoftmaxRegression:
     # set learning_rate as function parameter
-    def __init__(self, x_train, y_train, learning_rate, W_WIDTH=0.5, L2_lambda=0.01):
+    def __init__(
+        self,
+        x_train,
+        y_train,
+        x_valid,
+        y_valid,
+        learning_rate,
+        W_WIDTH=0.5,
+        L2_lambda=0.01,
+        batch_size=32,
+        epochs=500,
+    ):
         self.x_train = x_train
         self.y_train = y_train
+        self.x_valid = x_valid
+        self.y_valid = y_valid
         self.num_samples, self.input_dim = x_train.shape
         self.num_classes = len(y_train[1])
         self.W_WIDTH = W_WIDTH
         self.learning_rate = learning_rate
         self.L2_lambda = L2_lambda
+        self.batch_size = batch_size
+        self.epochs = epochs
 
     def initialize_weights(self):
         self.W = np.random.uniform(
@@ -139,42 +156,75 @@ class SoftmaxRegression:
 
     def predict_proba(self, X):
         # return probability of y
-        return softmax(self.forward(X))
+        return self.forward(X)
 
-    def predict(self):
-        #
-        self.y_pred = softmax(np.dot(self.x_train, self.W) + self.b)
-
-    def cross_entropy(self):
-        E = (-self.y_train * np.log(self.y_pred + 1e-10)).mean()
+    def cross_entropy(self, y_pred_batch, y_train_batch):
+        E = (-y_train_batch * np.log(y_pred_batch + 1e-10)).mean()
         L2 = self.L2_lambda * np.sum(self.W * self.W)
-        self.cost = E + L2
+        # self.cost = E + L2
+        return E + L2
 
-    def update_weight(self):
+    def update_weight(self, epoch, x_train_batch, y_train_batch, y_pred_batch):
         N = self.num_samples
+        M = x_train_batch.shape[0]
+        learning_rate = self.learning_rate(epoch)
 
-        error = self.y_pred - self.y_train
-        dW = (1 / N) * np.dot(self.x_train.T, error) + 2 * self.L2_lambda * self.W
-        db = (1 / N) * np.sum(error, axis=0)
+        error = y_pred_batch - y_train_batch
+        dW = (1 / M) * np.dot(x_train_batch.T, error) + 2 * self.L2_lambda * self.W
+        db = (1 / M) * np.sum(error, axis=0)
 
-        self.W -= self.learning_rate * dW
-        self.b -= self.learning_rate * db
+        self.W -= learning_rate * dW
+        self.b -= learning_rate * db
 
-    def train(self, epochs):
+    def train(self):
         print("Training started...")
         self.initialize_weights()
         cost_history = []
         start_time = time.time()
 
-        for epoch in range(epochs):
-            self.predict()
-            self.cross_entropy()
-            self.update_weight()
-            cost_history.append(self.cost)
+        # prepare validation labels
+        y_valid_label = self.y_valid.argmax(axis=1)
+        num_batches = int(np.ceil(self.num_samples / self.batch_size))
+
+        for epoch in range(self.epochs):
+            indices = np.arange(self.num_samples)
+            np.random.shuffle(indices)
+
+            epoch_cost_sum = 0
+
+            for i in range(num_batches):
+                # pick up batch data
+                start_idx = i * self.batch_size
+                end_idx = min((i + 1) * self.batch_size, self.num_samples)
+                batch_indices = indices[start_idx:end_idx]
+
+                x_batch = self.x_train[batch_indices]
+                y_batch = self.y_train[batch_indices]
+
+                y_pred_batch = self.predict_proba(x_batch)
+
+                batch_cost = self.cross_entropy(y_pred_batch, y_batch)
+                epoch_cost_sum += (
+                    batch_cost * x_batch.shape[0]
+                )  # cross_entropy returns mean cost
+
+                self.update_weight(epoch, x_batch, y_batch, y_pred_batch)
+
+            avg_epoch_cost = epoch_cost_sum / self.num_samples
+            cost_history.append(avg_epoch_cost)
 
             if (epoch + 1) % 50 == 0 or epoch == 0:
+
+                y_pred_proba_train = self.predict_proba(self.x_train)
+                y_pred_train_label = y_pred_proba_train.argmax(axis=1)
+                y_train_label = self.y_train.argmax(axis=1)
+                train_acc = accuracy_score(y_train_label, y_pred_train_label)
+
+                y_pred_proba_valid = self.predict_proba(self.x_valid)
+                y_pred_valid_label = y_pred_proba_valid.argmax(axis=1)
+                valid_acc = accuracy_score(y_valid_label, y_pred_valid_label)
                 print(
-                    f"Epoch {epoch+1}/{epochs}, Cost: {self.cost}, Elapsed time: {time.time() - start_time:.2f} sec"
+                    f"Epoch {epoch+1}/{epochs}, Avg Cost: {avg_epoch_cost}, TrainAcc: {train_acc:.6f}, ValidAcc: {valid_acc:.6f}, Elapsed time: {time.time() - start_time:.2f} sec"
                 )
 
         print("Learning finished.")
@@ -186,32 +236,76 @@ x_train, x_valid, y_train, y_valid = train_test_split(x_train, y_train, test_siz
 print(f"    Train samples: {x_train.shape[0]}, Valid samples: {x_valid.shape[0]}")
 
 print("\n2. Initialize model and training the model...")
-epochs = 500
-learning_rate = 0.1
+
+
+def lr_scheduler(epoch):
+    return 0.015 / (1 + 0.001 * epoch)
+
+
+learning_rate = 0.005
+epochs = 700
+print(f"Before compression: {x_train.shape[1]} features.")
+scaler = StandardScaler()
+x_train = scaler.fit_transform(x_train)
+x_valid = scaler.transform(x_valid)
+x_test = scaler.transform(x_test)
+
+# centering
+x_train -= np.mean(x_train, axis=0)
+x_valid -= np.mean(x_valid, axis=0)
+x_test -= np.mean(x_test, axis=0)
+
+var_thresh = 0.02
+variance = np.var(x_train, axis=0)
+keep_idx = variance >= var_thresh
+x_train = x_train[:, keep_idx]
+x_valid = x_valid[:, keep_idx]
+x_test = x_test[:, keep_idx]
+print(f"After variance thresholding: {x_train.shape[1]} features remain.")
+
+pca = PCA(n_components=500)
+x_train = pca.fit_transform(x_train)
+x_valid = pca.transform(x_valid)
+x_test = pca.transform(x_test)
+print(f"After PCA: {x_train.shape[1]} features remain.")
+
 
 model = SoftmaxRegression(
-    x_train=x_train, y_train=y_train, learning_rate=learning_rate, L2_lambda=0.01
+    x_train=x_train,
+    y_train=y_train,
+    learning_rate=lr_scheduler,
+    L2_lambda=0.00001,
+    W_WIDTH=W_WIDTH,
+    x_valid=x_valid,
+    y_valid=y_valid,
+    batch_size=32,
+    epochs=epochs,
 )
 
-cost_history = model.train(epochs=epochs)
+cost_history = model.train()
 
 print("Training completed.")
 print("\n3. Evaluating the model...")
 
-# calculate accuracy on validation data
+# === Validation Accuracy ===
 y_pred_proba_valid = model.predict_proba(x_valid)
-
-# pick the class with highest probability
 y_pred_valid_label = y_pred_proba_valid.argmax(axis=1)
-
-# Convert one-hot encoded y_valid to label
 y_valid_label = y_valid.argmax(axis=1)
 
-accuracy = np.mean(y_pred_valid_label == y_valid_label)
-print(f"Validation Accuracy: {accuracy * 100:.4f}%")
+## show cost graph
+import matplotlib.pyplot as plt
 
+plt.plot(cost_history[100:])
+plt.show()
 
 y_pred = model.predict_proba(x_test)
+
+# count each label distribution
+unique, counts = np.unique(y_pred.argmax(axis=1), return_counts=True)
+print("Predicted label distribution on test data:")
+for label, count in zip(unique, counts):
+    print(f"  Class {label}: {count} samples")
+
 
 submission = pd.Series(y_pred.argmax(axis=1), name="label")
 submission.to_csv("./submission_pred_02.csv", header=True, index_label="id")
