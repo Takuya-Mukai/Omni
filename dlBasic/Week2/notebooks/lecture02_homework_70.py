@@ -279,8 +279,8 @@ def train_one_settings(lr_func, l2_lambda, BATCH_SIZE, PCA_DIM):
     x_train_pca = pca.fit_transform(x_train_original)
     x_valid_pca = pca.transform(x_valid_original)
     poly = PolynomialFeatures(degree=2, include_bias=False)
-    x_train_poly = poly.fit_transform(x_train_pca[:, :50])
-    x_valid_poly = poly.transform(x_valid_pca[:, :50])
+    x_train_poly = poly.fit_transform(x_train_pca[:, :70])
+    x_valid_poly = poly.transform(x_valid_pca[:, :70])
     lr_name = lr_func.__name__
 
     print("--- Testing ---")
@@ -351,4 +351,4 @@ for label, count in zip(unique, counts):
 
 
 submission = pd.Series(y_pred.argmax(axis=1), name="label")
-submission.to_csv("./submission_pred_02.csv", header=True, index_label="id")
+submission.to_csv("./submission_pred_70.csv", header=True, index_label="id")

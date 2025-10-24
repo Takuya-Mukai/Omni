@@ -252,26 +252,22 @@ def lr_scheduler_exponential_0001(epoch):
     return 0.01 * np.exp(-0.001 * epoch)
 
 
-# --- チューニングするハイパーパラメータのグリッド ---
+# --- grid of hyperparameter tuning ---
 LR_CANDIDATES = [
-    lr_scheduler_0001,
-    lr_scheduler_exponential_0003,
+    # lr_scheduler_exponential_0003,
     lr_scheduler_exponential_0001,
 ]
-LR_NAMES = ["Inverse", "Step", "Exponential"]
-L2_CANDIDATES = [0.000005, 0.00001, 0.00005]
-BATCH_SIZE_CANDIDATES = [16, 32]
-PCA_DIM_CANDIDATES = [250, 300, 350, 400, 450]
+L2_CANDIDATES = [0.00005]
+BATCH_SIZE_CANDIDATES = [32]
+PCA_DIM_CANDIDATES = [300]
 
-# ----------------------------------------------------
+# -------------------------------------
 
-epochs = 500
+epochs = 1000
 W_WIDTH_INIT = 0.01
 
 
 from itertools import product
-
-from joblib import Parallel, delayed
 
 
 def train_one_settings(lr_func, l2_lambda, BATCH_SIZE, PCA_DIM):
@@ -279,8 +275,8 @@ def train_one_settings(lr_func, l2_lambda, BATCH_SIZE, PCA_DIM):
     x_train_pca = pca.fit_transform(x_train_original)
     x_valid_pca = pca.transform(x_valid_original)
     poly = PolynomialFeatures(degree=2, include_bias=False)
-    x_train_poly = poly.fit_transform(x_train_pca[:, :50])
-    x_valid_poly = poly.transform(x_valid_pca[:, :50])
+    x_train_poly = poly.fit_transform(x_train_pca[:, :60])
+    x_valid_poly = poly.transform(x_valid_pca[:, :60])
     lr_name = lr_func.__name__
 
     print("--- Testing ---")
@@ -313,12 +309,8 @@ param_combinations = list(
     product(LR_CANDIDATES, L2_CANDIDATES, BATCH_SIZE_CANDIDATES, PCA_DIM_CANDIDATES)
 )
 
-# results = Parallel(n_jobs=-1, backend="threading")(
-#     delayed(train_one_settings)(lr_func, l2_lambda, BATCH_SIZE, PCA_DIM)
-#     for lr_func, l2_lambda, BATCH_SIZE, PCA_DIM in param_combinations
-# )
-results = []
 
+results = []
 for lr_func, l2_lambda, BATCH_SIZE, PCA_DIM in param_combinations:
     result = train_one_settings(lr_func, l2_lambda, BATCH_SIZE, PCA_DIM)
     results.append(result)
@@ -336,12 +328,18 @@ best_pca = PCA(n_components=best_result["PCA"])
 x_train_pca_best = best_pca.fit_transform(x_train_original)
 x_valid_pca_best = best_pca.transform(x_valid_original)
 x_test_pca_best = best_pca.transform(x_test_original)
-y_pred_proba_valid = BEST_MODEL.predict_proba(BEST_X_VALID)
+
+poly = PolynomialFeatures(degree=2, include_bias=False)
+x_train_poly = poly.fit_transform(x_train_pca_best[:, :60])
+x_valid_poly = poly.transform(x_valid_pca_best[:, :60])
+x_test_poly = poly.transform(x_test_pca_best[:, :60])
+
+y_pred_proba_valid = BEST_MODEL.predict_proba(x_valid_poly)
 y_pred_valid_label = y_pred_proba_valid.argmax(axis=1)
 y_valid_label = y_valid.argmax(axis=1)
 
 
-y_pred = BEST_MODEL.predict_proba(BEST_X_TEST)
+y_pred = BEST_MODEL.predict_proba(x_test_poly)
 
 # count each label distribution
 unique, counts = np.unique(y_pred.argmax(axis=1), return_counts=True)
@@ -351,4 +349,4 @@ for label, count in zip(unique, counts):
 
 
 submission = pd.Series(y_pred.argmax(axis=1), name="label")
-submission.to_csv("./submission_pred_02.csv", header=True, index_label="id")
+submission.to_csv("./submission_pred_60.csv", header=True, index_label="id")
