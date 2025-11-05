@@ -28,6 +28,7 @@
                 matplotlib
                 scikit-learn
                 tensorflow
+                torch
               ]
             ))
           ];
