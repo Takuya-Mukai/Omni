@@ -29,9 +29,21 @@
                 scikit-learn
                 tensorflow
                 torch
+                ipykernel
               ]
             ))
           ];
+          shellHook = ''
+            PROJECT_NAME_RAW=$(basename "$PWD")
+            PROJECT_NAME=$(echo "$PROJECT_NAME_RAW" | tr '[:upper:]' '[:lower:]')
+            KERNEL_DIR="$HOME/.local/share/jupyter/kernels/$PROJECT_NAME"
+
+            if [ ! -d "$KERNEL_DIR" ]; then
+              echo ">>> [flake.nix shellHook] Jupyter kernel '$PROJECT_NAME' not found. Registering..."
+              python3 -m ipykernel install --user --name="$PROJECT_NAME"
+              echo ">>> [flake.nix shellHook] Kernel registered."
+            fi
+          '';
         };
       }
     );
